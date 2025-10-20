@@ -1,0 +1,67 @@
+// Prisma schema for Nexus AI Auth Service
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String?
+  role          Role     @default(MEMBER)
+  createdAt     DateTime @default(now())
+  lastLogin     DateTime?
+  metadata      Json?
+  teams         TeamMember[]
+
+  @@map("users")
+}
+
+model Team {
+  id                String   @id @default(cuid())
+  name              String
+  plan              Plan     @default(FREE)
+  createdAt         DateTime @default(now())
+  billingCustomerId String?
+  members           TeamMember[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id         String @id @default(cuid())
+  teamId     String
+  userId     String
+  roleInTeam TeamRole @default(MEMBER)
+  joinedAt   DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+enum Role {
+  ADMIN
+  TEAM_LEAD
+  MEMBER
+  FREELANCER
+  STUDENT
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum TeamRole {
+  LEAD
+  MEMBER
+}
