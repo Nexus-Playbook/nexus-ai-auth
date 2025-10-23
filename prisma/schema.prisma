@@ -18,6 +18,7 @@ model User {
   lastLogin     DateTime?
   metadata      Json?
   teams         TeamMember[]
+  auditLogs     AuditLog[]
 
   @@map("users")
 }
@@ -61,7 +62,29 @@ enum Plan {
   ENTERPRISE
 }
 
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    AuditAction
+  timestamp DateTime @default(now())
+  payload   Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
 enum TeamRole {
   LEAD
   MEMBER
+}
+
+enum AuditAction {
+  SIGNUP
+  LOGIN
+  LOGOUT
+  INVITE
+  JOIN_TEAM
+  LEAVE_TEAM
+  UPDATE_PROFILE
 }
