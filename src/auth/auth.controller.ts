@@ -1,8 +1,10 @@
 import { Controller, Post, Get, Body, UseGuards, Req, Res } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SignupDto, LoginDto, RefreshTokenDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GitHubAuthGuard } from './guards/github-auth.guard';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { AuthenticatedRequest } from '../types/prisma.types';
 import { Response } from 'express';
 
@@ -10,6 +12,7 @@ import { Response } from 'express';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 signups per minute
   @Post('signup')
   async signup(@Body() signupDto: SignupDto) {
     return this.authService.signup(
@@ -19,6 +22,7 @@ export class AuthController {
     );
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 login attempts per minute
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto.email, loginDto.password);
@@ -56,10 +60,27 @@ export class AuthController {
     res.redirect(redirectUrl);
   }
 
+  @UseGuards(GoogleAuthGuard)
+  @Get('google')
+  async googleLogin() {
+    // Initiates Google OAuth flow
+  }
+
+  @UseGuards(GoogleAuthGuard)
+  @Get('google/callback')
+  async googleCallback(@Req() req: AuthenticatedRequest, @Res() res: Response) {
+    const tokens = await this.authService.googleLogin(req.user);
+    
+    // Redirect to frontend with tokens (in production, use secure cookies)
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const redirectUrl = `${frontendUrl}/auth/callback?token=${tokens.accessToken}&refresh=${tokens.refreshToken}`;
+    
+    res.redirect(redirectUrl);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  async logout() {
-    // In a more complete implementation, you'd invalidate the refresh token
-    return { message: 'Logged out successfully' };
+  async logout(@Body() refreshTokenDto: RefreshTokenDto, @Req() req: AuthenticatedRequest) {
+    return this.authService.logout(refreshTokenDto.refreshToken, req.user.id);
   }
 }
