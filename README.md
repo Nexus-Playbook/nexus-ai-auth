@@ -1,121 +1,128 @@
 # Nexus AI Auth Service
 
-Authentication and user management microservice for Nexus AI platform.
+Core authentication and authorization microservice for the Nexus AI platform. Handles user identity, token management, and team-based access control with enterprise-grade security.
 
-## Features
-- User registration and authentication
-- JWT token management with refresh tokens
-- OAuth SSO integration (Google, GitHub)
-- Team/organization management
-- Role-based access control (RBAC)
-- Multi-tenant architecture
+## Overview
 
-## Tech Stack
-- Node.js with NestJS framework
-- TypeScript
-- PostgreSQL for data persistence
-- JWT for authentication
-- Passport.js for OAuth strategies
-- bcrypt for password hashing
+**Stack:** NestJS (TypeScript) | PostgreSQL | JWT | OAuth 2.0 | Redis
 
-## API Endpoints
+**Features:**
+- JWT-based authentication with refresh token rotation
+- Multi-provider SSO (Google, GitHub)
+- Team management and RBAC
+- Refresh token revocation with Redis blacklist
+- Audit logging for compliance
+- Rate limiting and input validation
+- Prometheus metrics for observability
 
-### Authentication
-- `POST /auth/signup` - User registration
-- `POST /auth/login` - User login
-- `POST /auth/refresh` - Refresh access token
-- `GET /auth/me` - Get current user info
-- `POST /auth/logout` - Logout and invalidate tokens
-
-### OAuth
-- `GET /auth/google` - Google OAuth initiation
-- `GET /auth/google/callback` - Google OAuth callback
-- `GET /auth/github` - GitHub OAuth initiation  
-- `GET /auth/github/callback` - GitHub OAuth callback
-
-### Teams
-- `POST /teams` - Create team/organization
-- `GET /teams` - List user's teams
-- `POST /teams/:id/invite` - Invite user to team
-- `PATCH /teams/:id/members/:userId/role` - Update member role
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 - Node.js 18+
 - PostgreSQL 14+
-- npm or yarn
+- Redis 6+
 
-### Installation
+### Setup
+
 ```bash
+# Install dependencies
 npm install
-```
 
-### Database Setup
-```bash
-# Create database
-createdb nexus_ai_auth
+# Configure environment
+cp .env.example .env
+# Update DATABASE_URL, JWT_SECRET, OAuth credentials, REDIS_URL
 
 # Run migrations
-npm run migration:run
-```
+npx prisma migrate deploy
 
-### Development
-```bash
+# Start development server
 npm run start:dev
 ```
 
-Service runs on [http://localhost:3001](http://localhost:3001)
+Service runs on `http://localhost:3001`
 
-## Environment Variables
+## Configuration
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✓ | PostgreSQL connection string |
+| `JWT_SECRET` | ✓ | Access token signing key (min 32 chars) |
+| `JWT_REFRESH_SECRET` | ✓ | Refresh token signing key (min 32 chars) |
+| `JWT_ACCESS_EXPIRY` | | Default: `15m` |
+| `JWT_REFRESH_EXPIRY` | | Default: `7d` |
+| `GOOGLE_CLIENT_ID` | | Google OAuth credentials |
+| `GOOGLE_CLIENT_SECRET` | | Google OAuth credentials |
+| `GITHUB_CLIENT_ID` | | GitHub OAuth credentials |
+| `GITHUB_CLIENT_SECRET` | | GitHub OAuth credentials |
+| `REDIS_URL` | | Redis connection (for token blacklist) |
+
+## API Reference
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/signup` | Register new user |
+| POST | `/auth/login` | Authenticate with credentials |
+| POST | `/auth/refresh` | Refresh access token |
+| GET | `/auth/me` | Get current user profile |
+| POST | `/auth/logout` | Revoke refresh token |
+
+### OAuth
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/auth/google` | Google OAuth flow initiation |
+| GET | `/auth/google/callback` | Google OAuth callback handler |
+| GET | `/auth/github` | GitHub OAuth flow initiation |
+| GET | `/auth/github/callback` | GitHub OAuth callback handler |
+
+### Teams
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/teams` | Create team |
+| GET | `/teams` | List user's teams |
+| POST | `/teams/:id/invite` | Invite member to team |
+| PATCH | `/teams/:id/members/:userId/role` | Update member role |
+
+### Observability
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/metrics` | Prometheus metrics |
+| GET | `/health` | Health check |
+
+## Architecture
+
+**Core Models:**
+- **User** - Identity and profile
+- **Team** - Organization/workspace container
+- **TeamMember** - Role-based team membership
+- **AuditLog** - Compliance and security auditing
+
+**Key Services:**
+- `AuthService` - Token generation, OAuth flows, logout
+- `RedisService` - Refresh token revocation via blacklist
+- `AuditService` - Event logging for compliance
+- `MetricsService` - Prometheus metrics collection
+
+## Security
+
+- Passwords hashed with bcrypt (cost: 10)
+- JWT validation on protected routes
+- Refresh tokens stored in Redis with TTL
+- Rate limiting: 5 requests/min on auth endpoints
+- Audit trail for all authentication events
+- CORS enabled for frontend integration
+
+## Build & Deployment
+
+```bash
+# Build for production
+npm run build
+
+# Start production server
+npm run start:prod
 ```
-DATABASE_URL=postgresql://user:pass@localhost:5432/nexus_ai_auth
-JWT_SECRET=your-jwt-secret
-JWT_REFRESH_SECRET=your-refresh-secret
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GITHUB_CLIENT_ID=your-github-client-id
-GITHUB_CLIENT_SECRET=your-github-client-secret
-```
 
-## Scripts
-- `npm run start:dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start:prod` - Start production server
-- `npm run test` - Run tests
-- `npm run migration:generate` - Generate new migration
-- `npm run migration:run` - Run pending migrations
-
-## Database Schema
-
-### Users Table
-- id (UUID, primary key)
-- email (string, unique)
-- password_hash (string, nullable)
-- role (enum: admin, team_lead, member, freelancer, student)
-- created_at, updated_at (timestamps)
-- metadata (jsonb)
-
-### Teams Table  
-- id (UUID, primary key)
-- name (string)
-- plan (enum: free, pro, enterprise)
-- billing_customer_id (string, nullable)
-- created_at, updated_at (timestamps)
-
-### Team Members Table
-- team_id (UUID, foreign key)
-- user_id (UUID, foreign key)
-- role (enum: admin, member)
-- joined_at (timestamp)
-
-## Security Features
-- Password hashing with bcrypt
-- JWT with short expiration times
-- Refresh token rotation
-- Rate limiting on auth endpoints
-- Input validation and sanitization
-- CORS configuration
+Docker support available in `/infra/docker/`
 
 ## License
 Private - Nexus AI Platform
