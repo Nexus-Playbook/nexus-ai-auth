@@ -37,6 +37,19 @@ export class AuthService {
       },
     });
 
+    // Auto-create a personal team for new users
+    await this.prisma.team.create({
+      data: {
+        name: `${name}'s Team`,
+        members: {
+          create: {
+            userId: user.id,
+            roleInTeam: 'LEAD',
+          },
+        },
+      },
+    });
+
     // Log signup event
     await this.auditService.log(user.id, AuditAction.SIGNUP, { email, name });
 
@@ -216,10 +229,17 @@ export class AuthService {
   }
 
   private async generateTokens(user: User): Promise<AuthTokens> {
+    // Get user's primary team for JWT payload
+    const userTeam = await this.prisma.teamMember.findFirst({
+      where: { userId: user.id },
+      include: { team: true },
+    });
+
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
+      teamId: userTeam?.teamId || null,
     };
 
     const accessToken = this.jwtService.sign(payload);
