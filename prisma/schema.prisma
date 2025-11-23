@@ -10,73 +10,102 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  passwordHash  String?
-  role          Role     @default(MEMBER)
-  createdAt     DateTime @default(now())
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?   // Nullable for OAuth users
+  name          String
+  phoneNumber   String?   // Optional
+  gender        Gender?   // Optional
+  dateOfBirth   DateTime? // Optional
+  role          Role      @default(MEMBER)
+  avatarUrl     String?   // Profile picture
+  isActive      Boolean   @default(true)
+  oauthProvider OAuthProvider?
+  oauthId       String?   // External provider ID
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   lastLogin     DateTime?
-  metadata      Json?
+  
+  // Relations
   teams         TeamMember[]
   auditLogs     AuditLog[]
+  createdTeams  Team[]       @relation("TeamOwner")
+  assignedRoles TeamMember[] @relation("AssignedBy")
+  assignedTasks String[]     // Will reference MongoDB task IDs
 
   @@map("users")
 }
 
 model Team {
-  id                String   @id @default(cuid())
+  id                String       @id @default(cuid())
   name              String
-  plan              Plan     @default(FREE)
-  createdAt         DateTime @default(now())
+  description       String?
+  ownerId           String       // Only one owner per team
+  plan              Plan         @default(FREE)
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
   billingCustomerId String?
+  
+  // Relations
+  owner             User         @relation("TeamOwner", fields: [ownerId], references: [id])
   members           TeamMember[]
 
   @@map("teams")
 }
 
 model TeamMember {
-  id         String @id @default(cuid())
+  id         String    @id @default(cuid())
   teamId     String
   userId     String
-  roleInTeam TeamRole @default(MEMBER)
-  joinedAt   DateTime @default(now())
+  roleInTeam TeamRole  @default(MEMBER)
+  assignedBy String?   // Who assigned this role
+  joinedAt   DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team       Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assigner   User?     @relation("AssignedBy", fields: [assignedBy], references: [id])
 
   @@unique([teamId, userId])
   @@map("team_members")
 }
 
 enum Role {
+  OWNER
   ADMIN
   TEAM_LEAD
+  DEVELOPER
+  TESTER
+  MEMBER      // Fallback role
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  TEAM_LEAD
+  DEVELOPER
+  TESTER
   MEMBER
-  FREELANCER
-  STUDENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum OAuthProvider {
+  GOOGLE
+  GITHUB
+  MICROSOFT
 }
 
 enum Plan {
   FREE
   PRO
   ENTERPRISE
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String
-  action    AuditAction
-  timestamp DateTime @default(now())
-  payload   Json?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("audit_logs")
-}
-
-enum TeamRole {
-  LEAD
-  MEMBER
 }
 
 enum AuditAction {
@@ -87,4 +116,36 @@ enum AuditAction {
   JOIN_TEAM
   LEAVE_TEAM
   UPDATE_PROFILE
+  ROLE_CHANGED
+  PERMISSION_GRANTED
+  PERMISSION_REVOKED
+  PROJECT_CREATED
+  PROJECT_DELETED
+  TASK_ASSIGNED
+  TASK_COMPLETED
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String
+  action    AuditAction
+  timestamp DateTime    @default(now())
+  payload   Json?       // Additional context data
+  ipAddress String?     // For security tracking
+  userAgent String?     // Browser/device info
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+// Role Permissions Matrix
+model RolePermission {
+  id         String @id @default(cuid())
+  role       Role
+  permission String // e.g., "create_project", "assign_tasks", "manage_users"
+  canAccess  Boolean @default(false)
+  
+  @@unique([role, permission])
+  @@map("role_permissions")
 }

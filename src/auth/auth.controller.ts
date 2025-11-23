@@ -15,11 +15,7 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 signups per minute
   @Post('signup')
   async signup(@Body() signupDto: SignupDto) {
-    return this.authService.signup(
-      signupDto.email,
-      signupDto.password,
-      signupDto.name
-    );
+    return this.authService.signup(signupDto);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 login attempts per minute

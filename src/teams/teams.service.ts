@@ -8,17 +8,21 @@ export class TeamsService {
 
   async createTeam(name: string, userId: string) {
     return this.prisma.$transaction(async (tx) => {
-      // Create team
+      // Create team with owner
       const team = await tx.team.create({
-        data: { name },
+        data: { 
+          name,
+          ownerId: userId, // Set the creator as owner
+        },
       });
 
-      // Add creator as team lead
+      // Add creator as team owner
       await tx.teamMember.create({
         data: {
           teamId: team.id,
           userId,
-          roleInTeam: TeamRole.LEAD,
+          roleInTeam: 'OWNER',
+          assignedBy: userId, // Self-assigned as owner
         },
       });
 
@@ -40,7 +44,9 @@ export class TeamsService {
               select: {
                 id: true,
                 email: true,
-                metadata: true,
+                name: true,
+                avatarUrl: true,
+                role: true,
               },
             },
           },
@@ -50,17 +56,19 @@ export class TeamsService {
   }
 
   async inviteToTeam(teamId: string, userEmail: string, inviterId: string) {
-    // Check if inviter is team lead
+    // Check if inviter has permission (OWNER, ADMIN, or TEAM_LEAD can invite)
     const inviterMembership = await this.prisma.teamMember.findFirst({
       where: {
         teamId,
         userId: inviterId,
-        roleInTeam: TeamRole.LEAD,
+        roleInTeam: { 
+          in: ['OWNER', 'ADMIN', 'TEAM_LEAD'],
+        },
       },
     });
 
     if (!inviterMembership) {
-      throw new BadRequestException('Only team leads can invite members');
+      throw new BadRequestException('Only team leaders and admins can invite members');
     }
 
     // Find user by email
@@ -91,14 +99,17 @@ export class TeamsService {
       data: {
         teamId,
         userId: user.id,
-        roleInTeam: TeamRole.MEMBER,
+        roleInTeam: 'MEMBER',
+        assignedBy: inviterId,
       },
       include: {
         user: {
           select: {
             id: true,
             email: true,
-            metadata: true,
+            name: true,
+            avatarUrl: true,
+            role: true,
           },
         },
         team: true,

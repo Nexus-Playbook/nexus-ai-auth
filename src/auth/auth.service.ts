@@ -5,6 +5,7 @@ import { RedisService } from '../redis/redis.service';
 import { AuditService, AuditAction } from '../audit/audit.service';
 import * as bcrypt from 'bcrypt';
 import { User, Role, JwtPayload, AuthTokens, UserWithoutPassword } from '../types/prisma.types';
+import { SignupDto, GoogleAuthDto } from './dto/auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -15,7 +16,13 @@ export class AuthService {
     private auditService: AuditService,
   ) {}
 
-  async signup(email: string, password: string, name: string): Promise<AuthTokens> {
+  async signup(signupData: SignupDto): Promise<AuthTokens> {
+    const { email, password, name, phoneNumber, gender, dateOfBirth, termsAccepted } = signupData;
+
+    if (!termsAccepted) {
+      throw new BadRequestException('Terms and conditions must be accepted');
+    }
+
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
@@ -28,25 +35,36 @@ export class AuthService {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Create user
+    // Create user with enhanced fields
     const user = await this.prisma.user.create({
       data: {
         email,
         passwordHash,
-        metadata: { name },
+        name,
+        phoneNumber,
+        gender,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        role: 'MEMBER', // Default role
+        isActive: true,
+        oauthProvider: null, // Manual signup
       },
     });
 
     // Auto-create a personal team for new users
-    await this.prisma.team.create({
+    const team = await this.prisma.team.create({
       data: {
         name: `${name}'s Team`,
-        members: {
-          create: {
-            userId: user.id,
-            roleInTeam: 'LEAD',
-          },
-        },
+        ownerId: user.id, // User is the owner of their team
+      },
+    });
+
+    // Add user as owner of the team
+    await this.prisma.teamMember.create({
+      data: {
+        teamId: team.id,
+        userId: user.id,
+        roleInTeam: 'OWNER',
+        assignedBy: user.id, // Self-assigned as owner
       },
     });
 
@@ -98,27 +116,56 @@ export class AuthService {
     });
 
     if (!user) {
+      // Create new user
       user = await this.prisma.user.create({
         data: {
           email,
-          metadata: {
-            name: displayName || username,
-            githubProfile: profile,
-            provider: 'github',
-          },
+          name: displayName || username || 'GitHub User',
+          isActive: true,
+          oauthProvider: 'GITHUB',
+          oauthId: username,
+          role: 'MEMBER',
+          passwordHash: null,
+        },
+      });
+
+      // Auto-create team for new GitHub OAuth users
+      const team = await this.prisma.team.create({
+        data: {
+          name: `${user.name}'s Team`,
+          ownerId: user.id,
+        },
+      });
+
+      // Add user as owner of their team
+      await this.prisma.teamMember.create({
+        data: {
+          teamId: team.id,
+          userId: user.id,
+          roleInTeam: 'OWNER',
+          assignedBy: user.id,
         },
       });
     } else {
-      // Update last login and GitHub profile info
-      user = await this.prisma.user.update({
+      // Update last login and profile info if needed
+      const updateData: any = {
+        lastLogin: new Date(),
+      };
+
+      // Update OAuth info if not set
+      if (!user.oauthProvider) {
+        updateData.oauthProvider = 'GITHUB';
+        updateData.oauthId = username;
+      }
+
+      // Update name if not set
+      if (!user.name && (displayName || username)) {
+        updateData.name = displayName || username;
+      }
+
+      await this.prisma.user.update({
         where: { id: user.id },
-        data: {
-          lastLogin: new Date(),
-          metadata: {
-            ...((user.metadata as any) || {}),
-            githubProfile: profile,
-          },
-        },
+        data: updateData,
       });
     }
 
@@ -141,39 +188,59 @@ export class AuthService {
       // Create new user with auto-team creation
       user = await this.prisma.user.create({
         data: {
+          name: name || 'Google User',
           email,
-          metadata: {
-            name,
-            picture,
-            googleId,
-            provider: 'google',
-          },
+          isActive: true,
+          oauthProvider: 'GOOGLE',
+          oauthId: googleId,
+          avatarUrl: picture,
+          role: 'MEMBER', // Default role for OAuth users
+          passwordHash: null, // OAuth users don't have passwords
         },
       });
 
       // Auto-create team for new Google OAuth users
-      await this.prisma.team.create({
+      const team = await this.prisma.team.create({
         data: {
-          name: `${name}'s Team`,
-          members: {
-            create: {
-              userId: user.id,
-              roleInTeam: 'LEAD',
-            },
-          },
+          name: `${user.name}'s Team`,
+          ownerId: user.id,
+        },
+      });
+
+      // Add user as owner of their team
+      await this.prisma.teamMember.create({
+        data: {
+          teamId: team.id,
+          userId: user.id,
+          roleInTeam: 'OWNER',
+          assignedBy: user.id,
         },
       });
     } else {
-      // Update last login and Google profile info
-      user = await this.prisma.user.update({
+      // Update last login and Google profile info if needed
+      const updateData: any = {
+        lastLogin: new Date(),
+      };
+
+      // Update OAuth info if not set
+      if (!user.oauthProvider) {
+        updateData.oauthProvider = 'GOOGLE';
+        updateData.oauthId = googleId;
+      }
+
+      // Update avatar if not set
+      if (!user.avatarUrl && picture) {
+        updateData.avatarUrl = picture;
+      }
+
+      // Update name if not set
+      if (!user.name && name) {
+        updateData.name = name;
+      }
+
+      await this.prisma.user.update({
         where: { id: user.id },
-        data: {
-          lastLogin: new Date(),
-          metadata: {
-            ...((user.metadata as any) || {}),
-            googleProfile: { name, picture, googleId },
-          },
-        },
+        data: updateData,
       });
     }
 

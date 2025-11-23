@@ -11,10 +11,16 @@ export class UsersService {
       select: {
         id: true,
         email: true,
+        name: true,
+        phoneNumber: true,
+        gender: true,
+        dateOfBirth: true,
         role: true,
+        avatarUrl: true,
+        isActive: true,
+        oauthProvider: true,
         createdAt: true,
         lastLogin: true,
-        metadata: true,
       },
     });
   }
@@ -25,10 +31,16 @@ export class UsersService {
       select: {
         id: true,
         email: true,
+        name: true,
+        phoneNumber: true,
+        gender: true,
+        dateOfBirth: true,
         role: true,
+        avatarUrl: true,
+        isActive: true,
+        oauthProvider: true,
         createdAt: true,
         lastLogin: true,
-        metadata: true,
       },
     });
   }

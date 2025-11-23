@@ -39,7 +39,8 @@ export class AuditService {
         user: {
           select: {
             email: true,
-            metadata: true,
+            name: true,
+            avatarUrl: true,
           },
         },
       },
