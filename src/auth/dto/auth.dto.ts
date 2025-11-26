@@ -30,7 +30,7 @@ export class SignupDto {
   name: string;
 
   @IsOptional()
-  @IsMobilePhone()
+  @IsString()
   phoneNumber?: string;
 
   @IsOptional()
@@ -62,7 +62,7 @@ export class GoogleAuthDto {
   oauthId: string;
 
   @IsOptional()
-  @IsMobilePhone()
+  @IsString()
   phoneNumber?: string;
 
   @IsOptional()

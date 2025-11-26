@@ -50,24 +50,6 @@ export class AuthService {
       },
     });
 
-    // Auto-create a personal team for new users
-    const team = await this.prisma.team.create({
-      data: {
-        name: `${name}'s Team`,
-        ownerId: user.id, // User is the owner of their team
-      },
-    });
-
-    // Add user as owner of the team
-    await this.prisma.teamMember.create({
-      data: {
-        teamId: team.id,
-        userId: user.id,
-        roleInTeam: 'OWNER',
-        assignedBy: user.id, // Self-assigned as owner
-      },
-    });
-
     // Log signup event
     await this.auditService.log(user.id, AuditAction.SIGNUP, { email, name });
 
@@ -128,24 +110,6 @@ export class AuthService {
           passwordHash: null,
         },
       });
-
-      // Auto-create team for new GitHub OAuth users
-      const team = await this.prisma.team.create({
-        data: {
-          name: `${user.name}'s Team`,
-          ownerId: user.id,
-        },
-      });
-
-      // Add user as owner of their team
-      await this.prisma.teamMember.create({
-        data: {
-          teamId: team.id,
-          userId: user.id,
-          roleInTeam: 'OWNER',
-          assignedBy: user.id,
-        },
-      });
     } else {
       // Update last login and profile info if needed
       const updateData: any = {
@@ -185,7 +149,7 @@ export class AuthService {
     });
 
     if (!user) {
-      // Create new user with auto-team creation
+      // Create new user with no auto-team creation
       user = await this.prisma.user.create({
         data: {
           name: name || 'Google User',
@@ -196,24 +160,6 @@ export class AuthService {
           avatarUrl: picture,
           role: 'MEMBER', // Default role for OAuth users
           passwordHash: null, // OAuth users don't have passwords
-        },
-      });
-
-      // Auto-create team for new Google OAuth users
-      const team = await this.prisma.team.create({
-        data: {
-          name: `${user.name}'s Team`,
-          ownerId: user.id,
-        },
-      });
-
-      // Add user as owner of their team
-      await this.prisma.teamMember.create({
-        data: {
-          teamId: team.id,
-          userId: user.id,
-          roleInTeam: 'OWNER',
-          assignedBy: user.id,
         },
       });
     } else {
