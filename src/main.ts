@@ -1,9 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  
+  // Cookie parser middleware - Required for reading httpOnly cookies
+  app.use(cookieParser());
   
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({
