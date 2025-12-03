@@ -11,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { AuditModule } from './audit/audit.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { MetricsModule } from './metrics/metrics.module';
     RedisModule,
     AuditModule,
     MetricsModule,
+    HealthModule,
     PrismaModule,
     AuthModule,
     UsersModule,
