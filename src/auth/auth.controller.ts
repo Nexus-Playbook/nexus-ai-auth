@@ -6,7 +6,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GitHubAuthGuard } from './guards/github-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { AuthenticatedRequest } from '../types/prisma.types';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -25,8 +25,38 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refreshTokens(refreshTokenDto.refreshToken);
+  async refresh(@Req() req: Request, @Res() res: Response) {
+    // Read refreshToken from httpOnly cookie
+    const refreshToken = req.cookies?.refreshToken;
+    
+    if (!refreshToken) {
+      return res.status(401).json({
+        message: 'Refresh token not found',
+        error: 'Unauthorized',
+        statusCode: 401
+      });
+    }
+
+    const tokens = await this.authService.refreshTokens(refreshToken);
+    
+    // Set new tokens in httpOnly cookies
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    res.cookie('accessToken', tokens.accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000 // 15 minutes
+    });
+    
+    res.cookie('refreshToken', tokens.refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    
+    return res.status(200).json(tokens);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -49,11 +79,28 @@ export class AuthController {
   async githubCallback(@Req() req: AuthenticatedRequest, @Res() res: Response) {
     const tokens = await this.authService.githubLogin(req.user);
     
-    // Redirect to frontend with tokens (in production, use secure cookies)
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const redirectUrl = `${frontendUrl}/auth/callback?token=${tokens.accessToken}&refresh=${tokens.refreshToken}`;
+    // Security: Use httpOnly cookies instead of URL params to prevent token exposure
+    const isProduction = process.env.NODE_ENV === 'production';
     
-    res.redirect(redirectUrl);
+    // Set access token (short-lived, 15 min)
+    res.cookie('accessToken', tokens.accessToken, {
+      httpOnly: true,        // Prevents XSS attacks
+      secure: isProduction,  // HTTPS only in production
+      sameSite: 'lax',       // CSRF protection
+      maxAge: 15 * 60 * 1000 // 15 minutes
+    });
+    
+    // Set refresh token (long-lived, 7 days)
+    res.cookie('refreshToken', tokens.refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    
+    // Redirect to frontend without tokens in URL
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    res.redirect(`${frontendUrl}/auth/callback?success=true`);
   }
 
   @UseGuards(GoogleAuthGuard)
@@ -67,16 +114,46 @@ export class AuthController {
   async googleCallback(@Req() req: AuthenticatedRequest, @Res() res: Response) {
     const tokens = await this.authService.googleLogin(req.user);
     
-    // Redirect to frontend with tokens (in production, use secure cookies)
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const redirectUrl = `${frontendUrl}/auth/callback?token=${tokens.accessToken}&refresh=${tokens.refreshToken}`;
+    // Security: Use httpOnly cookies instead of URL params to prevent token exposure
+    const isProduction = process.env.NODE_ENV === 'production';
     
-    res.redirect(redirectUrl);
+    // Set access token (short-lived, 15 min)
+    res.cookie('accessToken', tokens.accessToken, {
+      httpOnly: true,        // Prevents XSS attacks
+      secure: isProduction,  // HTTPS only in production
+      sameSite: 'lax',       // CSRF protection
+      maxAge: 15 * 60 * 1000 // 15 minutes
+    });
+    
+    // Set refresh token (long-lived, 7 days)
+    res.cookie('refreshToken', tokens.refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    
+    // Redirect to frontend without tokens in URL
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    res.redirect(`${frontendUrl}/auth/callback?success=true`);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  async logout(@Body() refreshTokenDto: RefreshTokenDto, @Req() req: AuthenticatedRequest) {
-    return this.authService.logout(refreshTokenDto.refreshToken, req.user.id);
+  async logout(@Req() req: AuthenticatedRequest & Request, @Res() res: Response) {
+    // Read refreshToken from httpOnly cookie
+    const refreshToken = req.cookies?.refreshToken;
+    
+    if (refreshToken) {
+      await this.authService.logout(refreshToken, req.user.id);
+    }
+    
+    // Clear httpOnly cookies on logout
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+    
+    return res.json({
+      message: 'Logged out successfully'
+    });
   }
 }
