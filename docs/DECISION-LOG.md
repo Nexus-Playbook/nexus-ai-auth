@@ -230,7 +230,7 @@ AuditLog {
 
 ---
 
-## 8. OAuth Account Linking
+## 8. OAuth Account Linking & Security
 
 ### Decision: Link OAuth Providers to Existing Accounts
 
@@ -245,6 +245,69 @@ AuditLog {
 - Email verification assumed from OAuth providers (Google, GitHub)
 - No password required for OAuth users
 - Users can add password later via "Set Password" flow (future)
+
+### Decision: OAuth Tokens in httpOnly Cookies 
+
+**Status**: ✅ **SECURITY FIX** - P0 Critical Issue Resolved  
+**Problem Identified**:
+- Original implementation passed JWTs in URL query parameters
+- **Security risks**: Browser history exposure, server log leakage, referrer header leaks, shoulder surfing
+
+**Solution Implemented**:
+```typescript
+// Google/GitHub callbacks now use httpOnly secure cookies
+res.cookie('accessToken', tokens.accessToken, {
+  httpOnly: true,        // Prevents XSS attacks (no JavaScript access)
+  secure: isProduction,  // HTTPS only in production
+  sameSite: 'lax',       // CSRF protection
+  maxAge: 15 * 60 * 1000 // 15 minutes
+});
+
+res.cookie('refreshToken', tokens.refreshToken, {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+});
+
+// Redirect WITHOUT tokens in URL
+res.redirect(`${frontendUrl}/auth/callback?success=true`);
+```
+
+**Cookie-Based Token Refresh** :
+```typescript
+// Refresh endpoint reads from httpOnly cookie instead of request body
+@Post('refresh')
+async refresh(@Req() req: Request, @Res() res: Response) {
+  const refreshToken = req.cookies?.refreshToken;
+  if (!refreshToken) {
+    return res.status(401).json({ message: 'Refresh token not found' });
+  }
+  
+  const tokens = await this.authService.refreshTokens(refreshToken);
+  
+  // Set new tokens in cookies
+  res.cookie('accessToken', tokens.accessToken, { /* ... */ });
+  res.cookie('refreshToken', tokens.refreshToken, { /* ... */ });
+  
+  return res.status(200).json(tokens);
+}
+```
+
+**Security Benefits**:
+- ✅ Tokens never visible in browser address bar
+- ✅ Tokens not stored in browser history
+- ✅ Tokens not logged in server access logs
+- ✅ Tokens not leaked via Referer headers
+- ✅ XSS protection via httpOnly flag
+- ✅ CSRF protection via sameSite policy
+- ✅ Full cookie-based auth flow (OAuth, refresh, logout)
+
+**Logout Enhancement**:
+- Cookies explicitly cleared on logout: `res.clearCookie('accessToken')` and `res.clearCookie('refreshToken')`
+- Logout reads refreshToken from cookie to blacklist it before clearing
+
+**Production Readiness**: This fix eliminates the critical P0 security blocker for OAuth flows and provides industry-standard cookie-based authentication.
 
 ---
 
@@ -365,3 +428,4 @@ Week 1 Auth service **perfectly aligns** with the Language-Responsibility Map an
 | Week 1 | Removed auto personal team | Ownership conflicts |
 | Week 1 | Added comprehensive audit logging | Compliance requirements |
 | Week 1 | Documented architecture decisions | Week 1 plan requirement |
+| Week 1 | **OAuth security fix: httpOnly cookies** | **P0 Security: Prevent token exposure in URLs** |
